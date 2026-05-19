@@ -139,20 +139,6 @@ if ($Confirmation -eq "Y") {
             }
         }
 
-        # Driver version check
-        <#foreach ($Driver in $Drivers) {
-            if ($null -ne $Driver.Name) {
-
-                "$($Driver.Name)" | Tee-Object $LogFile -Append | Write-Host
-
-                $PreUpdateDriver = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                    Get-CimInstance Win32_PNPSignedDriver -Filter "Description='$using:($Driver.Name)'"
-                }
-
-                $PreUpdateDriver.DriverVersion | Tee-Object $LogFile -Append | Write-Host -ForegroundColor DarkYellow
-            }
-        }#>
-
         foreach ($Driver in $Drivers) {
             if ($null -ne $Driver.Name) {
                 $driverName = $Driver.Name
@@ -164,26 +150,6 @@ if ($Confirmation -eq "Y") {
                 $PreUpdateDriver.DriverVersion | Tee-Object $LogFile -Append | Write-Host -ForegroundColor DarkYellow
             }
         }
-
-        # Install drivers
-        <#foreach ($Driver in $Drivers) {
-
-            $File = $Driver.File
-
-            $ExitCode = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                $Process = Start-Process `
-                    -FilePath "C:\DriverInstallFiles\$using:File.exe" `
-                    -ArgumentList '/s' `
-                    -Wait `
-                    -PassThru
-
-                $Process.ExitCode
-            }
-
-            if ($ExitCode -ne 0) {
-                throw "$File installer failed with exit code $ExitCode"
-            }
-        }#>
 
         $job = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
             param($file)
@@ -207,20 +173,6 @@ if ($Confirmation -eq "Y") {
         catch {
             "Failed to restart or reconnect within timeout." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
         }
-
-        # Post update check
-        <#foreach ($Driver in $Drivers) {
-            if ($null -ne $Driver.Name) {
-
-                "$($Driver.Name)" | Tee-Object $LogFile -Append | Write-Host
-
-                $PostUpdateDriver = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                    Get-CimInstance Win32_PNPSignedDriver -Filter "Description='$using:($Driver.Name)'"
-                }
-
-                $PostUpdateDriver.DriverVersion | Tee-Object $LogFile -Append | Write-Host -ForegroundColor DarkYellow
-            }
-        }#>
 
         foreach ($Driver in $Drivers) {
             if ($null -ne $Driver.Name) {
