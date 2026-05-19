@@ -31,7 +31,7 @@ $ComputerName = Read-Host "Enter the computer name to update"
 $FullComputerName = (Resolve-DnsName $ComputerName).Name
 $ComputerIP = (Resolve-DnsName $ComputerName).IPAddress
 $DNSComputerName = (Resolve-DnsName $ComputerIP).NameHost
-$TestConnectionHost = (Test-Connection $ComputerIP -Count 1).Source
+#$TestConnectionHost = (Test-Connection $ComputerIP -Count 1).Source
 
 # Test to confirm computer is a HP 600 G6 Mini
 $Model = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
@@ -59,8 +59,8 @@ if (!(Test-Path $LogFile)) {
 # Confirm DNS Names match
 "Full Computer Name: $FullComputerName" | Tee-Object $LogFile -Append | Write-Host
 "DNS Computer Name: $DNSComputerName" | Tee-Object $LogFile -Append | Write-Host
-"Test Connection Host: $TestConnectionHost" | Tee-Object $LogFile -Append | Write-Host
-Write-Host "Please confirm that the Full Computer Name, DNS Computer Name, and Test Connection Host match." -ForegroundColor Yellow
+#"Test Connection Host: $TestConnectionHost" | Tee-Object $LogFile -Append | Write-Host
+Write-Host "Please confirm that the Full Computer Name and DNS Computer Name match." -ForegroundColor Yellow
 $Confirmation = Read-Host "Do the computer names match? (Y/N)"
 
 if ($Confirmation -eq "Y") {
