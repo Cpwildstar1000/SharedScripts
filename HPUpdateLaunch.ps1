@@ -1,0 +1,1 @@
+Start-Process powershell.exe -Credential(Get-Credential) -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\HPminiUpdate.ps1"
