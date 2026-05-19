@@ -185,25 +185,19 @@ if ($Confirmation -eq "Y") {
             }
         }#>
 
-        foreach ($Driver in $Drivers) {
+        $job = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+            param($file)
 
-            $File = $Driver.File
+            $proc = Start-Process `
+                -FilePath "C:\DriverInstallFiles\$file.exe" `
+                -ArgumentList '/s' `
+                -PassThru
 
-            $ExitCode = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                param($file)
+            $proc.WaitForExit(600000) # 10 min timeout
+            return $proc.ExitCode
+        } -ArgumentList $File
 
-                Start-Process `
-                    -FilePath "C:\DriverInstallFiles\$file.exe" `
-                    -ArgumentList '/s' `
-                    -Wait `
-                    -PassThru
-            } -ArgumentList $File
-
-            if ($ExitCode.ExitCode -ne 0) {
-                throw "$File installer failed with exit code $($ExitCode.ExitCode)"
-            }
-        }
-
+        if ($job -eq $false) {"$File installer timed out" | Write-Host -ForegroundColor Red}
 
         # Restart computer
         try {
