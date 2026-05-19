@@ -162,8 +162,8 @@ if ($Confirmation -eq "Y") {
             $proc.WaitForExit(600000) # 10 min timeout
             return $proc.ExitCode
         } -ArgumentList $File
-
-        if ($job -eq $false) {"$File installer timed out" | Write-Host -ForegroundColor Red}
+        if ($job -eq $true) {"Finished $job" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green}
+        if ($job -eq $false) {"$File installer timed out" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red}
 
         # Restart computer
         try {
