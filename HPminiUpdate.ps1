@@ -13,10 +13,8 @@ function Show-FedoraProgressBar {
     )
 
     $Percent = [Math]::Max(0, [Math]::Min(100, $Percent))
-
     $width = 40
     $filled = [Math]::Round(($Percent / 100) * $width)
-
     Write-Host -NoNewline "`r$Activity ["
 
     for ($i = 0; $i -lt $width; $i++) {
@@ -27,7 +25,6 @@ function Show-FedoraProgressBar {
             Write-Host -NoNewline "░" -ForegroundColor DarkGray
         }
     }
-
     Write-Host -NoNewline "] "
 
     if ($Percent -lt 100) {
@@ -65,7 +62,6 @@ $ComputerName = Read-Host "Enter the computer name to update"
 $FullComputerName = (Resolve-DnsName $ComputerName).Name
 $ComputerIP = (Resolve-DnsName $ComputerName).IPAddress
 $DNSComputerName = (Resolve-DnsName $ComputerIP).NameHost
-#$TestConnectionHost = (Test-Connection $ComputerIP -Count 1).Source
 
 # Test to confirm computer is a HP 600 G6 Mini
 $Model = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
@@ -117,18 +113,14 @@ if ($Confirmation -eq "Y") {
                 ((Get-ItemProperty -Path "Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List\{00000000-0000-0000-0000-000000000000}").startTimeLo)
             )
         }
-
         "Last gpupdate time: $LastUpdate" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-
         Invoke-Command -ComputerName $FullComputerName -ScriptBlock { gpupdate /force }
-
         $CurrentUpdate = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
             [datetime]::FromFileTime(
                 ([Int64] ((Get-ItemProperty -Path "Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List\{00000000-0000-0000-0000-000000000000}").startTimeHi) -shl 32) -bor
                 ((Get-ItemProperty -Path "Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List\{00000000-0000-0000-0000-000000000000}").startTimeLo)
             )
         }
-
         "Current gpupdate time: $CurrentUpdate" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
 
         # Driver folder check/create
@@ -144,39 +136,31 @@ if ($Confirmation -eq "Y") {
         }
 
         if (Invoke-Command -ComputerName $FullComputerName -ScriptBlock { Test-Path C:\DriverInstallFiles }) {
-
             $totalDrivers = $Drivers.Count
             $currentDriver = 0
-
             foreach ($Driver in $Drivers) {
-
-                $currentDriver++
                 $Percent = [math]::Round(($currentDriver / $totalDrivers) * 100)
                 Show-FedoraProgressBar -Percent $Percent -Activity "Copying Drivers"
 
                 $File = $Driver.File
                 Copy-Item -Path "\\mad-wsitbob\C$\Shares\Shared\Drivers\HP\HP 600 G6 Mini\$File.exe" `
                         -Destination "\\$FullComputerName\C$\DriverInstallFiles\$File.exe"
-                "Copied $File to $FullComputerName" | Tee-Object $LogFile -Append | Write-Host
-
+                "Copied $File to $FullComputerName" | Tee-Object $LogFile -Append #| Write-Host
+                $currentDriver++
+                
                 if (!(Test-Path "\\$FullComputerName\C$\DriverInstallFiles\$File.exe")) {
                     throw "$File failed to copy"
                 }
             }
-
             Write-Host ""
-
         }
 
         # BIOS CHECK (fixed null safety)
         $PreUpdateBIOS = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-
             Get-CimInstance Win32_BIOS
         }
-
         if ($PreUpdateBIOS.SMBIOSBIOSVersion) {
             $biosVersion = [version]($PreUpdateBIOS.SMBIOSBIOSVersion -replace '[^\d\.]')
-
             if ($biosVersion -lt [version]"2.24") {
                 "Please update BIOS on device" | Tee-Object $LogFile -Append | Write-Host
             }
@@ -194,26 +178,9 @@ if ($Confirmation -eq "Y") {
             }
         }
 
-        <#$job = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-            param($file)
-
-            $proc = Start-Process `
-                -FilePath "C:\DriverInstallFiles\$file.exe" `
-                -ArgumentList '/s' `
-                -PassThru
-
-            $proc.WaitForExit(600000) # 10 min timeout
-            return $proc.ExitCode
-        } -ArgumentList $File
-        if ($job -eq $true) {"Finished $job" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green}
-        if ($job -eq $false) {"$File installer timed out" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red}#>
-
         $totalDrivers = $Drivers.Count
         $currentDriver = 0
-
         foreach ($Driver in $Drivers) {
-
-            $currentDriver++
             $Percent = [math]::Round(($currentDriver / $totalDrivers) * 100)
             Show-FedoraProgressBar -Percent $Percent -Activity "Installing Drivers"
 
@@ -263,9 +230,11 @@ if ($Confirmation -eq "Y") {
 
             if ($result.Status -eq "TimedOut") {
                 "$File installer TIMED OUT after 5 minutes" #| Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+                $currentDriver++
             }
             else {
                 "Installer exit code for $File : $($result.ExitCode)" #| Tee-Object $LogFile -Append | Write-Host
+                $currentDriver++
             }
         }
         Write-Host ""
