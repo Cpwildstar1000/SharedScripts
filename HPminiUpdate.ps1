@@ -4,6 +4,40 @@
 # Last Edited: 05/15/2026                                         #
 ###################################################################
 
+
+# Progress bar function
+function Show-FedoraProgressBar {
+    param(
+        [int]$Percent,
+        [string]$Activity = "Progress"
+    )
+
+    $Percent = [Math]::Max(0, [Math]::Min(100, $Percent))
+
+    $width = 40
+    $filled = [Math]::Round(($Percent / 100) * $width)
+
+    Write-Host -NoNewline "`r$Activity ["
+
+    for ($i = 0; $i -lt $width; $i++) {
+        if ($i -lt $filled) {
+            Write-Host -NoNewline "█" -ForegroundColor Cyan
+        }
+        else {
+            Write-Host -NoNewline "░" -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host -NoNewline "] "
+
+    if ($Percent -lt 100) {
+        Write-Host -NoNewline "$Percent%" -ForegroundColor White
+    }
+    else {
+        Write-Host "Done!" -ForegroundColor Green
+    }
+}
+
 # Set up Driver Files in array for later copy
 $Drivers = @(
     @{File='INTEL BLUETOOTH'; Name='Intel(R) Wireless Bluetooth(R)'}
@@ -111,12 +145,18 @@ if ($Confirmation -eq "Y") {
 
         if (Invoke-Command -ComputerName $FullComputerName -ScriptBlock { Test-Path C:\DriverInstallFiles }) {
 
+            $totalDrivers = $Drivers.Count
+            $currentDriver = 0
+
             foreach ($Driver in $Drivers) {
+
+                $currentDriver++
+                $Percent = [math]::Round(($currentDriver / $totalDrivers) * 100)
+                Show-FedoraProgressBar -Percent $Percent -Activity "Copying Drivers"
+
                 $File = $Driver.File
-
                 Copy-Item -Path "\\mad-wsitbob\C$\Shares\Shared\Drivers\HP\HP 600 G6 Mini\$File.exe" `
-                          -Destination "\\$FullComputerName\C$\DriverInstallFiles\$File.exe"
-
+                        -Destination "\\$FullComputerName\C$\DriverInstallFiles\$File.exe"
                 "Copied $File to $FullComputerName" | Tee-Object $LogFile -Append | Write-Host
 
                 if (!(Test-Path "\\$FullComputerName\C$\DriverInstallFiles\$File.exe")) {
@@ -124,10 +164,13 @@ if ($Confirmation -eq "Y") {
                 }
             }
 
+            Write-Host ""
+
         }
 
         # BIOS CHECK (fixed null safety)
         $PreUpdateBIOS = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+
             Get-CimInstance Win32_BIOS
         }
 
@@ -151,7 +194,7 @@ if ($Confirmation -eq "Y") {
             }
         }
 
-        $job = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+        <#$job = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
             param($file)
 
             $proc = Start-Process `
@@ -163,7 +206,32 @@ if ($Confirmation -eq "Y") {
             return $proc.ExitCode
         } -ArgumentList $File
         if ($job -eq $true) {"Finished $job" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green}
-        if ($job -eq $false) {"$File installer timed out" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red}
+        if ($job -eq $false) {"$File installer timed out" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red}#>
+        
+        $totalDrivers = $Drivers.Count
+        $currentDriver = 0
+
+        foreach ($Driver in $Drivers) {
+            $currentDriver++
+            $Percent = [math]::Round(($currentDriver / $totalDrivers) * 100)
+            Show-FedoraProgressBar -Percent $Percent -Activity "Installing Drivers"
+
+            $File = $Driver.File
+            $result = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+                param($file)
+                $proc = Start-Process `
+                    -FilePath "C:\DriverInstallFiles\$file.exe" `
+                    -ArgumentList '/s' `
+                    -PassThru
+                $proc.WaitForExit(300000)
+                return $proc.ExitCode
+            } -ArgumentList $File
+
+            "Installer exit code for $File : $result" |
+                Tee-Object $LogFile -Append | Write-Host
+        }
+
+        Write-Host ""
 
         # Restart computer
         try {
