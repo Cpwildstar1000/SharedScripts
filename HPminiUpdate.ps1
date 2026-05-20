@@ -262,12 +262,10 @@ if ($Confirmation -eq "Y") {
             } -ArgumentList $File
 
             if ($result.Status -eq "TimedOut") {
-                "$File installer TIMED OUT after 5 minutes" |
-                    Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+                "$File installer TIMED OUT after 5 minutes" #| Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
             }
             else {
-                "Installer exit code for $File : $($result.ExitCode)" |
-                    Tee-Object $LogFile -Append | Write-Host
+                "Installer exit code for $File : $($result.ExitCode)" #| Tee-Object $LogFile -Append | Write-Host
             }
         }
         Write-Host ""
