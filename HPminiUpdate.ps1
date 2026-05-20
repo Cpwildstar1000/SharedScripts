@@ -207,11 +207,12 @@ if ($Confirmation -eq "Y") {
         } -ArgumentList $File
         if ($job -eq $true) {"Finished $job" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green}
         if ($job -eq $false) {"$File installer timed out" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red}#>
-        
+
         $totalDrivers = $Drivers.Count
         $currentDriver = 0
 
         foreach ($Driver in $Drivers) {
+
             $currentDriver++
             $Percent = [math]::Round(($currentDriver / $totalDrivers) * 100)
             Show-FedoraProgressBar -Percent $Percent -Activity "Installing Drivers"
@@ -219,18 +220,56 @@ if ($Confirmation -eq "Y") {
             $File = $Driver.File
             $result = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
                 param($file)
-                $proc = Start-Process `
-                    -FilePath "C:\DriverInstallFiles\$file.exe" `
-                    -ArgumentList '/s' `
-                    -PassThru
-                $proc.WaitForExit(300000)
-                return $proc.ExitCode
+                $job = Start-Job -ScriptBlock {
+                    param($file)
+                    $proc = Start-Process `
+                        -FilePath "C:\DriverInstallFiles\$file.exe" `
+                        -ArgumentList '/s' `
+                        -PassThru `
+                        -Wait
+                    return @{
+                        ExitCode = $proc.ExitCode
+                        ProcessId = $proc.Id
+                    }
+                } -ArgumentList $file
+
+                if (Wait-Job $job -Timeout 300) {
+                    $jobResult = Receive-Job $job
+                    Remove-Job $job -Force
+                    return @{
+                        Status = "Completed"
+                        ExitCode = $jobResult.ExitCode
+                    }
+                }
+                else {
+                    try {
+                        $childProcesses = Get-CimInstance Win32_Process |
+                            Where-Object {
+                                $_.CommandLine -like "*C:\DriverInstallFiles\$file.exe*"
+                            }
+                        foreach ($proc in $childProcesses) {
+                            Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+                        }
+                        Stop-Job $job -Force -ErrorAction SilentlyContinue
+                        Remove-Job $job -Force -ErrorAction SilentlyContinue
+                    }
+                    catch {}
+                    return @{
+                        Status = "TimedOut"
+                        ExitCode = $null
+                    }
+                }
             } -ArgumentList $File
 
-            "Installer exit code for $File : $result" |
-                Tee-Object $LogFile -Append | Write-Host
+            if ($result.Status -eq "TimedOut") {
+                "$File installer TIMED OUT after 5 minutes" |
+                    Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+            }
+            else {
+                "Installer exit code for $File : $($result.ExitCode)" |
+                    Tee-Object $LogFile -Append | Write-Host
+            }
         }
-
         Write-Host ""
 
         # Restart computer
