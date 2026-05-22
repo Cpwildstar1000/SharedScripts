@@ -151,6 +151,9 @@ if ($Confirmation -eq "Y") {
                 if (!(Test-Path "\\$FullComputerName\C$\DriverInstallFiles\$File.exe")) {
                     throw "$File failed to copy"
                 }
+                if ($currentDriver -eq $totalDrivers) {
+                    Show-FedoraProgressBar -Percent 100 -Activity "Copying Drivers"
+                }
             }
             Write-Host ""
         }
