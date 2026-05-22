@@ -90,7 +90,7 @@ if (!(Test-Path $LogFile)) {
 "Full Computer Name: $FullComputerName" | Tee-Object $LogFile -Append | Write-Host
 "DNS Computer Name: $DNSComputerName" | Tee-Object $LogFile -Append | Write-Host
 #"Test Connection Host: $TestConnectionHost" | Tee-Object $LogFile -Append | Write-Host
-Write-Host "Please confirm that the Full Computer Name and DNS Computer Name match." -ForegroundColor Yellow
+Write-Host "Please confirm that the Full Computer Name and DNS Computer Name match. If not test connection to computer and try again." -ForegroundColor Yellow
 $Confirmation = Read-Host "Do the computer names match? (Y/N)"
 
 if ($Confirmation -eq "Y") {
