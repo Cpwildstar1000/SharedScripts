@@ -229,7 +229,7 @@ if ($Confirmation -eq "Y") {
             } -ArgumentList $File
 
             if ($result.Status -eq "TimedOut") {
-                "$File installer TIMED OUT after 5 minutes" #| Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+                #"$File installer TIMED OUT after 5 minutes" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
                 $currentDriver++
             }
             else {
