@@ -35,6 +35,34 @@ function Show-FedoraProgressBar {
     }
 }
 
+function Wait-ForRemotePowerShell {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ComputerName,
+        [int]$TimeoutSeconds = 600,
+        [int]$DelaySeconds = 5
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue) {
+            try {
+                $result = Invoke-Command -ComputerName $ComputerName -ScriptBlock { $env:COMPUTERNAME } -ErrorAction Stop
+                if ($result) {
+                    return $true
+                }
+            }
+            catch {
+            }
+        }
+
+        Start-Sleep -Seconds $DelaySeconds
+    }
+
+    return $false
+}
+
 # Set up Driver Files in array for later copy
 $Drivers = @(
     @{File='INTEL BLUETOOTH'; Name='Intel(R) Wireless Bluetooth(R)'}
@@ -244,11 +272,29 @@ if ($Confirmation -eq "Y") {
 
         # Restart computer
         try {
-            "Computer is restarting. Waiting for $FullComputerName..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-            Restart-Computer -ComputerName $FullComputerName -Force -Wait -For PowerShell -Timeout 600 -Delay 5
+            "Restarting remote computer from target side: $FullComputerName" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+
+            try {
+                Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+                    Restart-Computer -Force
+                } -ErrorAction Stop
+            }
+            catch {
+                $restartConfirmationError = $_.Exception.Message
+                "Restart command was issued, but the session closed before confirmation: $restartConfirmationError" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+            }
+
+            "Waiting for $FullComputerName to come back and accept PowerShell remoting..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+            if (-not (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 5)) {
+                throw "Remote computer did not return PowerShell remoting within 600 seconds."
+            }
+
+            "Remote PowerShell is available on $FullComputerName" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
         }
         catch {
-            "Failed to restart or reconnect within timeout." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+            $restartVerificationError = $_.Exception.Message
+            "Failed to restart or verify remote PowerShell availability for ${FullComputerName}: $restartVerificationError" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+            throw
         }
 
         foreach ($Driver in $Drivers) {
