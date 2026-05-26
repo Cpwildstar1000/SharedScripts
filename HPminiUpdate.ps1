@@ -40,26 +40,66 @@ function Wait-ForRemotePowerShell {
         [Parameter(Mandatory)]
         [string]$ComputerName,
         [int]$TimeoutSeconds = 600,
-        [int]$DelaySeconds = 5
+        [int]$DelaySeconds = 5,
+        [string]$LogFile = $null,
+        [switch]$Verbose
     )
 
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    function Write-Status {
+        param(
+            [string]$Message,
+            [string]$Color = 'Yellow'
+        )
 
-    while ((Get-Date) -lt $deadline) {
+        if ($LogFile) {
+            $Message | Tee-Object $LogFile -Append | Write-Host -ForegroundColor $Color
+        }
+        else {
+            Write-Host $Message -ForegroundColor $Color
+        }
+    }
+
+    if ($Verbose) { Write-Status "Wait-ForRemotePowerShell: Starting wait for ${ComputerName} (timeout ${TimeoutSeconds}s)" }
+
+    $overallDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    # First wait a short period for the computer to go offline (reboot initiated)
+    $wentOffline = $false
+    $offlineTimeout = [Math]::Min(120, [int]($TimeoutSeconds / 3))
+    $offlineDeadline = (Get-Date).AddSeconds($offlineTimeout)
+
+    if ($Verbose) { Write-Status "Waiting up to ${offlineTimeout}s for ${ComputerName} to go offline..." }
+    while ((Get-Date) -lt $offlineDeadline) {
+        if (-not (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
+            $wentOffline = $true
+            if ($Verbose) { Write-Status "Detected ${ComputerName} is offline." }
+            break
+        }
+        Start-Sleep -Seconds $DelaySeconds
+    }
+
+    if (-not $wentOffline -and $Verbose) { Write-Status "${ComputerName} did not go offline during the initial window; continuing to wait for remoting to become available." }
+
+    # Now wait for the machine to be reachable and accept PowerShell remoting
+    if ($Verbose) { Write-Status "Waiting for ${ComputerName} to respond to ping and accept PowerShell remoting..." }
+    while ((Get-Date) -lt $overallDeadline) {
         if (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue) {
             try {
                 $result = Invoke-Command -ComputerName $ComputerName -ScriptBlock { $env:COMPUTERNAME } -ErrorAction Stop
                 if ($result) {
+                    if ($Verbose) { Write-Status "PowerShell remoting is available on ${ComputerName}." -Color 'Green' }
                     return $true
                 }
             }
             catch {
+                if ($Verbose) { Write-Status "PowerShell remoting not ready yet on ${ComputerName}: $($_.Exception.Message)" -Color 'DarkYellow' }
             }
         }
 
         Start-Sleep -Seconds $DelaySeconds
     }
 
+    Write-Status "Timed out waiting for PowerShell remoting on ${ComputerName} after ${TimeoutSeconds}s." 'Red'
     return $false
 }
 
@@ -284,12 +324,12 @@ if ($Confirmation -eq "Y") {
                 "Restart command was issued, but the session closed before confirmation: $restartConfirmationError" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
             }
 
-            "Waiting for $FullComputerName to come back and accept PowerShell remoting..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-            if (-not (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 5)) {
+            "Waiting for ${FullComputerName} to come back and accept PowerShell remoting..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+            if (-not (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 5 -LogFile $LogFile -Verbose)) {
                 throw "Remote computer did not return PowerShell remoting within 600 seconds."
             }
 
-            "Remote PowerShell is available on $FullComputerName" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
+            "Remote PowerShell is available on ${FullComputerName}" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
         }
         catch {
             $restartVerificationError = $_.Exception.Message
