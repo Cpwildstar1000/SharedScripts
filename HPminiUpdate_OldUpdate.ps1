@@ -35,90 +35,6 @@ function Show-FedoraProgressBar {
     }
 }
 
-function Wait-ForRemotePowerShell {
-    param(
-        [Parameter(Mandatory)]
-        [string]$ComputerName,
-        [int]$TimeoutSeconds = 600,
-        [int]$DelaySeconds = 5,
-        [string]$LogFile = $null,
-        [datetime]$PreviousBootTime = $null,
-        [switch]$Verbose
-    )
-
-    function Write-Status {
-        param(
-            [string]$Message,
-            [string]$Color = 'Yellow'
-        )
-
-        if ($LogFile) {
-            $Message | Tee-Object $LogFile -Append | Write-Host -ForegroundColor $Color
-        }
-        else {
-            Write-Host $Message -ForegroundColor $Color
-        }
-    }
-
-    if ($Verbose) { Write-Status "Wait-ForRemotePowerShell: Starting wait for ${ComputerName} (timeout ${TimeoutSeconds}s)" }
-
-    $overallDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
-
-    # First wait a short period for the computer to go offline (reboot initiated)
-    $wentOffline = $false
-    $offlineTimeout = [Math]::Min(120, [int]($TimeoutSeconds / 3))
-    $offlineDeadline = (Get-Date).AddSeconds($offlineTimeout)
-
-    if ($Verbose) { Write-Status "Waiting up to ${offlineTimeout}s for ${ComputerName} to go offline..." }
-    while ((Get-Date) -lt $offlineDeadline) {
-        if (-not (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
-            $wentOffline = $true
-            if ($Verbose) { Write-Status "Detected ${ComputerName} is offline." }
-            break
-        }
-        Start-Sleep -Seconds $DelaySeconds
-    }
-
-    if (-not $wentOffline -and $Verbose) { Write-Status "${ComputerName} did not go offline during the initial window; continuing to wait for remoting to become available." }
-
-    # Now wait for the machine to be reachable and accept PowerShell remoting
-    if ($Verbose) { Write-Status "Waiting for ${ComputerName} to respond to ping and accept PowerShell remoting..." }
-    while ((Get-Date) -lt $overallDeadline) {
-        if (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue) {
-            try {
-                $remoteState = Invoke-Command -ComputerName $ComputerName -ScriptBlock {
-                    [PSCustomObject]@{
-                        ComputerName = $env:COMPUTERNAME
-                        BootTime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
-                    }
-                } -ErrorAction Stop
-
-                $remoteBootTime = [datetime]$remoteState.BootTime
-                if ($PreviousBootTime) {
-                    if ($remoteBootTime -gt $PreviousBootTime) {
-                        if ($Verbose) { Write-Status "PowerShell remoting available and boot time changed on ${ComputerName} (new boot: $remoteBootTime)." -Color 'Green' }
-                        return $true
-                    }
-
-                    if ($Verbose) { Write-Status "PowerShell remoting is available on ${ComputerName}, but boot time is still old ($remoteBootTime). Waiting for actual reboot." -Color 'DarkYellow' }
-                }
-                else {
-                    if ($Verbose) { Write-Status "PowerShell remoting is available on ${ComputerName}." -Color 'Green' }
-                    return $true
-                }
-            }
-            catch {
-                if ($Verbose) { Write-Status "PowerShell remoting not ready yet on ${ComputerName}: $($_.Exception.Message)" -Color 'DarkYellow' }
-            }
-        }
-
-        Start-Sleep -Seconds $DelaySeconds
-    }
-
-    Write-Status "Timed out waiting for PowerShell remoting on ${ComputerName} after ${TimeoutSeconds}s." 'Red'
-    return $false
-}
-
 # Set up Driver Files in array for later copy
 $Drivers = @(
     @{File='INTEL BLUETOOTH'; Name='Intel(R) Wireless Bluetooth(R)'}
@@ -147,7 +63,7 @@ $FullComputerName = (Resolve-DnsName $ComputerName).Name
 $ComputerIP = (Resolve-DnsName $ComputerName).IPAddress
 $DNSComputerName = (Resolve-DnsName $ComputerIP).NameHost
 
-# Test to confirm cohttps://apply.fbijobs.gov/psc/ps/EMPLOYEE/HRMS/c/HRS_HRAM_FL.HRS_CG_SEARCH_FL.GBL?Page=HRS_APP_JBPST_FL&Action=U&FOCUS=Applicant&SiteId=1&JobOpeningId=62647&PostingSeq=1&utm_source=Indeed&utm_medium=JobPosting&utm_campaign=Indeed_JP_SAE&utm_content=Cyber&mputer is a HP 600 G6 Mini
+# Test to confirm computer is a HP 600 G6 Mini
 $Model = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
     (Get-CimInstance win32_computersystem).model
 }
@@ -242,7 +158,7 @@ if ($Confirmation -eq "Y") {
             Write-Host ""
         }
 
-        # BIOS Check
+        # BIOS CHECK (fixed null safety)
         $PreUpdateBIOS = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
             Get-CimInstance Win32_BIOS
         }
@@ -328,36 +244,11 @@ if ($Confirmation -eq "Y") {
 
         # Restart computer
         try {
-            "Restarting remote computer from target side: $FullComputerName" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-
-            $previousBootTime = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
-            } -ErrorAction Stop
-            if ($previousBootTime) {
-                "Previous boot time for ${FullComputerName}: $previousBootTime" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-            }
-
-            try {
-                Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                    Restart-Computer -Force
-                } -ErrorAction Stop
-            }
-            catch {
-                $restartConfirmationError = $_.Exception.Message
-                "Restart command was issued, but the session closed before confirmation: $restartConfirmationError" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-            }
-
-            "Waiting for ${FullComputerName} to come back and accept PowerShell remoting after reboot..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-            if (-not (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 5 -LogFile $LogFile -PreviousBootTime $previousBootTime -Verbose)) {
-                throw "Remote computer did not return PowerShell remoting within 600 seconds."
-            }
-
-            "Remote PowerShell is available on ${FullComputerName}" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
+            "Computer is restarting. Waiting for $FullComputerName..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+            Restart-Computer -ComputerName $FullComputerName -Force -Wait -For PowerShell -Timeout 600 -Delay 5
         }
         catch {
-            $restartVerificationError = $_.Exception.Message
-            "Failed to restart or verify remote PowerShell availability for ${FullComputerName}: $restartVerificationError" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
-            throw
+            "Failed to restart or reconnect within timeout." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
         }
 
         foreach ($Driver in $Drivers) {
