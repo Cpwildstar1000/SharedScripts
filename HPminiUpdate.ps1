@@ -190,7 +190,7 @@ if ($Confirmation -eq "Y") {
     try {
         "Updating remote computer: $FullComputerName" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
 
-        <# gpupdate
+        # gpupdate
         $LastUpdate = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
             [datetime]::FromFileTime(
                 ([Int64] ((Get-ItemProperty -Path "Registry::HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Extension-List\{00000000-0000-0000-0000-000000000000}").startTimeHi) -shl 32) -bor
@@ -324,7 +324,7 @@ if ($Confirmation -eq "Y") {
                 $currentDriver++
             }
         }
-        Write-Host ""#>
+        Write-Host ""
 
         # Restart computer
         try {
@@ -360,7 +360,7 @@ if ($Confirmation -eq "Y") {
             throw
         }
 
-        <#foreach ($Driver in $Drivers) {
+        foreach ($Driver in $Drivers) {
             if ($null -ne $Driver.Name) {
                 $driverName = $Driver.Name
                 "$driverName" | Tee-Object $LogFile -Append | Write-Host
@@ -370,16 +370,16 @@ if ($Confirmation -eq "Y") {
                 } -ArgumentList $driverName
                 $PreUpdateDriver.DriverVersion | Tee-Object $LogFile -Append | Write-Host -ForegroundColor DarkYellow
             }
-        }#>
+        }
 
         "Update completed successfully on $FullComputerName" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
 
-        <# Cleanup folder/files
+        # Cleanup folder/files
         Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
             Remove-Item C:\DriverInstallFiles -Recurse -Force -ErrorAction Stop
         }
 
-        "Cleaned up driver installation folder" | Tee-Object $LogFile -Append | Write-Host#>
+        "Cleaned up driver installation folder" | Tee-Object $LogFile -Append | Write-Host
     }
     catch {
         "An error occurred while updating $FullComputerName : $_" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
@@ -388,5 +388,4 @@ if ($Confirmation -eq "Y") {
 else {
     "User did not confirm computer names match." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
     exit
-}Failed to restart or verify remote PowerShell availability for: A parameter with the name 'Verbose' was defined multiple times for the command.
-An error occurred while updating: A parameter with the name 'Verbose' was defined multiple times for the command.
+}
