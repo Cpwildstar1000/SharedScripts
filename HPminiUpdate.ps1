@@ -43,7 +43,7 @@ function Wait-ForRemotePowerShell {
         [int]$DelaySeconds = 5,
         [string]$LogFile = $null,
         [datetime]$PreviousBootTime = $null,
-        [switch]$Verbose
+        [switch]$UseVerbose
     )
 
     function Write-Status {
@@ -60,7 +60,7 @@ function Wait-ForRemotePowerShell {
         }
     }
 
-    if ($Verbose) { Write-Status "Wait-ForRemotePowerShell: Starting wait for ${ComputerName} (timeout ${TimeoutSeconds}s)" }
+    if ($UseVerbose) { Write-Status "Wait-ForRemotePowerShell: Starting wait for ${ComputerName} (timeout ${TimeoutSeconds}s)" }
 
     $overallDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
 
@@ -69,20 +69,20 @@ function Wait-ForRemotePowerShell {
     $offlineTimeout = [Math]::Min(120, [int]($TimeoutSeconds / 3))
     $offlineDeadline = (Get-Date).AddSeconds($offlineTimeout)
 
-    if ($Verbose) { Write-Status "Waiting up to ${offlineTimeout}s for ${ComputerName} to go offline..." }
+    if ($UseVerbose) { Write-Status "Waiting up to ${offlineTimeout}s for ${ComputerName} to go offline..." }
     while ((Get-Date) -lt $offlineDeadline) {
         if (-not (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
             $wentOffline = $true
-            if ($Verbose) { Write-Status "Detected ${ComputerName} is offline." }
+            if ($UseVerbose) { Write-Status "Detected ${ComputerName} is offline." }
             break
         }
         Start-Sleep -Seconds $DelaySeconds
     }
 
-    if (-not $wentOffline -and $Verbose) { Write-Status "${ComputerName} did not go offline during the initial window; continuing to wait for remoting to become available." }
+    if (-not $wentOffline -and $UseVerbose) { Write-Status "${ComputerName} did not go offline during the initial window; continuing to wait for remoting to become available." }
 
     # Now wait for the machine to be reachable and accept PowerShell remoting
-    if ($Verbose) { Write-Status "Waiting for ${ComputerName} to respond to ping and accept PowerShell remoting..." }
+    if ($UseVerbose) { Write-Status "Waiting for ${ComputerName} to respond to ping and accept PowerShell remoting..." }
     while ((Get-Date) -lt $overallDeadline) {
         if (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet -ErrorAction SilentlyContinue) {
             try {
@@ -96,19 +96,19 @@ function Wait-ForRemotePowerShell {
                 $remoteBootTime = [datetime]$remoteState.BootTime
                 if ($PreviousBootTime) {
                     if ($remoteBootTime -gt $PreviousBootTime) {
-                        if ($Verbose) { Write-Status "PowerShell remoting available and boot time changed on ${ComputerName} (new boot: $remoteBootTime)." -Color 'Green' }
+                        if ($UseVerbose) { Write-Status "PowerShell remoting available and boot time changed on ${ComputerName} (new boot: $remoteBootTime)." -Color 'Green' }
                         return $true
                     }
 
-                    if ($Verbose) { Write-Status "PowerShell remoting is available on ${ComputerName}, but boot time is still old ($remoteBootTime). Waiting for actual reboot." -Color 'DarkYellow' }
+                    if ($UseVerbose) { Write-Status "PowerShell remoting is available on ${ComputerName}, but boot time is still old ($remoteBootTime). Waiting for actual reboot." -Color 'DarkYellow' }
                 }
                 else {
-                    if ($Verbose) { Write-Status "PowerShell remoting is available on ${ComputerName}." -Color 'Green' }
+                    if ($UseVerbose) { Write-Status "PowerShell remoting is available on ${ComputerName}." -Color 'Green' }
                     return $true
                 }
             }
             catch {
-                if ($Verbose) { Write-Status "PowerShell remoting not ready yet on ${ComputerName}: $($_.Exception.Message)" -Color 'DarkYellow' }
+                if ($UseVerbose) { Write-Status "PowerShell remoting not ready yet on ${ComputerName}: $($_.Exception.Message)" -Color 'DarkYellow' }
             }
         }
 
@@ -348,7 +348,7 @@ if ($Confirmation -eq "Y") {
             }
 
             "Waiting for ${FullComputerName} to come back and accept PowerShell remoting after reboot..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
-            if (-not (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 5 -LogFile $LogFile -PreviousBootTime $previousBootTime -Verbose)) {
+            if (-not (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 5 -LogFile $LogFile -PreviousBootTime $previousBootTime -UseVerbose)) {
                 throw "Remote computer did not return PowerShell remoting within 600 seconds."
             }
 
@@ -388,4 +388,5 @@ if ($Confirmation -eq "Y") {
 else {
     "User did not confirm computer names match." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
     exit
-}
+}Failed to restart or verify remote PowerShell availability for: A parameter with the name 'Verbose' was defined multiple times for the command.
+An error occurred while updating: A parameter with the name 'Verbose' was defined multiple times for the command.
