@@ -1,6 +1,7 @@
 # How to use
 
-Run .ps1 as admin account or run .cmd as normal account in the same folder as the .ps1 script
+Run .ps1 as admin account. If you are getting an execution policy error then run the .cmd file from the same location as the .ps1 file
+
 
 # DNS Check
 
