@@ -147,7 +147,7 @@ $FullComputerName = (Resolve-DnsName $ComputerName).Name
 $ComputerIP = (Resolve-DnsName $ComputerName).IPAddress
 $DNSComputerName = (Resolve-DnsName $ComputerIP).NameHost
 
-# Test to confirm cohttps://apply.fbijobs.gov/psc/ps/EMPLOYEE/HRMS/c/HRS_HRAM_FL.HRS_CG_SEARCH_FL.GBL?Page=HRS_APP_JBPST_FL&Action=U&FOCUS=Applicant&SiteId=1&JobOpeningId=62647&PostingSeq=1&utm_source=Indeed&utm_medium=JobPosting&utm_campaign=Indeed_JP_SAE&utm_content=Cyber&mputer is a HP 600 G6 Mini
+# Test to confirm computer is a HP 600 G6 Mini
 $Model = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
     (Get-CimInstance win32_computersystem).model
 }
