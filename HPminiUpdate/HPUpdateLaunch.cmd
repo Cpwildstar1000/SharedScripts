@@ -1,0 +1,1 @@
+powershell -ep Bypass -File .\HPminiUpdate.ps1
