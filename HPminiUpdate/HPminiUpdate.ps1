@@ -275,30 +275,57 @@ if ($Confirmation -eq "Y") {
             Show-FedoraProgressBar -Percent $Percent -Activity "Installing Drivers"
 
             $File = $Driver.File
-            # Run installer directly on remote host and wait with a longer timeout
-            $result = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
-                param($file, $installerTimeoutSeconds)
-                try {
-                    $installerPath = "C:\DriverInstallFiles\$file.exe"
-                    if (-not (Test-Path $installerPath)) {
-                        return @{ Status = 'Missing'; ExitCode = $null; Message = 'Installer not found' }
-                    }
+            $preInstallBootTime = $null
+            try {
+                $preInstallBootTime = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+                    (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+                } -ErrorAction Stop
+            }
+            catch {
+                "Unable to read boot time before installing $File: $($_.Exception.Message)" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
+                throw
+            }
 
-                    $proc = Start-Process -FilePath $installerPath -ArgumentList '/s' -PassThru -NoNewWindow
-                    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-                    while (-not $proc.HasExited) {
-                        Start-Sleep -Seconds 2
-                        if ($sw.Elapsed.TotalSeconds -gt $installerTimeoutSeconds) {
-                            try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
-                            return @{ Status = 'TimedOut'; ExitCode = $null; Message = 'Installer timed out' }
+            try {
+                # Run installer directly on remote host and wait with a longer timeout
+                $result = Invoke-Command -ComputerName $FullComputerName -ScriptBlock {
+                    param($file, $installerTimeoutSeconds)
+                    try {
+                        $installerPath = "C:\DriverInstallFiles\$file.exe"
+                        if (-not (Test-Path $installerPath)) {
+                            return @{ Status = 'Missing'; ExitCode = $null; Message = 'Installer not found' }
                         }
+
+                        $proc = Start-Process -FilePath $installerPath -ArgumentList '/s' -PassThru -NoNewWindow
+                        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                        while (-not $proc.HasExited) {
+                            Start-Sleep -Seconds 2
+                            if ($sw.Elapsed.TotalSeconds -gt $installerTimeoutSeconds) {
+                                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+                                return @{ Status = 'TimedOut'; ExitCode = $null; Message = 'Installer timed out' }
+                            }
+                        }
+                        return @{ Status = 'Completed'; ExitCode = $proc.ExitCode }
                     }
-                    return @{ Status = 'Completed'; ExitCode = $proc.ExitCode }
+                    catch {
+                        return @{ Status = 'Failed'; ExitCode = $null; Message = $_.Exception.Message }
+                    }
+                } -ArgumentList $File, 900
+            }
+            catch {
+                $invokeError = $_.Exception.Message
+                "Invoke-Command failed during installation of $File: $invokeError" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+                if ($invokeError -match 'The WinRM client cannot process the request|The network path was not found|The connection was closed|transport-level error|No connection could be made') {
+                    "Remote session lost during installation of $File; waiting for $FullComputerName to reconnect..." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Yellow
+                    if (Wait-ForRemotePowerShell -ComputerName $FullComputerName -TimeoutSeconds 600 -DelaySeconds 10 -LogFile $LogFile -PreviousBootTime $preInstallBootTime -UseVerbose) {
+                        "Remote computer reconnected after $File install; continuing with next driver." | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Green
+                        $currentDriver++
+                        continue
+                    }
                 }
-                catch {
-                    return @{ Status = 'Failed'; ExitCode = $null; Message = $_.Exception.Message }
-                }
-            } -ArgumentList $File, 900
+
+                throw
+            }
 
             if ($result.Status -eq 'Missing') {
                 "Installer for $File not found on remote machine" | Tee-Object $LogFile -Append | Write-Host -ForegroundColor Red
